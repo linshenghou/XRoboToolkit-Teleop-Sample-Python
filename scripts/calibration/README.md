@@ -41,6 +41,28 @@ X_T^B  =  X_G^B  ·  X_C^G  ·  X_T^C
   python scripts/calibration/handeye_capture.py ...
   ```
 
+### Ubuntu setup with `uv`
+
+On the Ubuntu machine, clone the calibration branch and run the calibration-focused
+setup script from the repo root:
+
+```bash
+git clone -b feat/hand-eye-calibration https://github.com/linshenghou/XRoboToolkit-Teleop-Sample-Python.git
+cd XRoboToolkit-Teleop-Sample-Python
+
+# Install uv first if needed:
+# curl -LsSf https://astral.sh/uv/install.sh | sh
+# source "$HOME/.local/bin/env"
+
+bash scripts/calibration/setup_uv_calibration_ubuntu.sh --system-packages
+source .venv-calibration/bin/activate
+```
+
+The script installs the minimal calibration environment (`numpy`, `opencv-python`,
+`pyrealsense2`, `xrobotoolkit_sdk`, and this repo editable with `--no-deps`). It does
+not install the full simulation/hardware dependency set unless you run the main project
+setup separately.
+
 ## Workflow
 
 The four scripts map onto the standard hand-eye calibration SOP. `handeye_common.py`
