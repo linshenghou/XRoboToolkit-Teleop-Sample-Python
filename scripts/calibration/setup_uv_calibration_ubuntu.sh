@@ -106,7 +106,17 @@ if [[ ! -d dependencies/XRoboToolkit-PC-Service-Pybind/.git ]]; then
 else
     git -C dependencies/XRoboToolkit-PC-Service-Pybind pull --ff-only
 fi
-bash dependencies/XRoboToolkit-PC-Service-Pybind/setup_ubuntu.sh
+pushd dependencies/XRoboToolkit-PC-Service-Pybind >/dev/null
+python - <<'PY'
+from pathlib import Path
+
+path = Path("setup_ubuntu.sh")
+text = path.read_text()
+text = text.replace("pip install pybind11 -y", "python -m pip install pybind11")
+path.write_text(text)
+PY
+bash setup_ubuntu.sh
+popd >/dev/null
 
 echo "[4/5] Installing this repo for calibration imports"
 uv pip install -e . --no-deps
