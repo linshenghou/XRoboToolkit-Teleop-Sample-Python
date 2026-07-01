@@ -254,11 +254,23 @@ def main() -> None:
         still_since = None
         loop_i = 0
         trig_armed = True  # rising-edge / hysteresis state for the Pico trigger
+        next_invalid_warn = 0.0
 
         while True:
             loop_i += 1
             pose = xr.get_pose_by_name(args.controller)  # [x,y,z,qx,qy,qz,qw]
             frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
+            if not _pose_has_valid_quat(pose):
+                now = time.monotonic()
+                if now >= next_invalid_warn:
+                    print(f"  [wait] {args.controller} pose is not valid yet (zero quaternion).")
+                    next_invalid_warn = now + 2.0
+                if loop_i % max(1, args.preview_every) == 0:
+                    cv2.imshow(win_title, _draw_waiting_pose(frame_bgr, args.controller))
+                key = cv2.waitKey(50) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+                continue
 
             # stillness detection (positional + small rotational proxy)
             still = _is_still(prev_pose, pose)
@@ -298,6 +310,9 @@ def main() -> None:
                 # re-grab the freshest frame + pose at the same instant to minimise skew
                 frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
                 pose_now = xr.get_pose_by_name(args.controller)
+                if not _pose_has_valid_quat(pose_now):
+                    print(f"  [skip] {args.controller} pose became invalid -- wake/track the controller and retry.")
+                    continue
                 src = "trigger" if trigger_rising else "SPACE"
                 meta = {
                     "source": src,
@@ -369,9 +384,17 @@ def _existing_samples(record_dir: Path):
     return sorted(Path(record_dir).glob("sample_*.json"))
 
 
+def _pose_has_valid_quat(pose) -> bool:
+    """XR can return a zero quaternion while tracking is not ready."""
+    if pose is None:
+        return False
+    arr = np.asarray(pose, dtype=np.float64)
+    return arr.shape[0] >= 7 and np.linalg.norm(arr[3:7]) > 1e-8
+
+
 def _is_still(pose_a, pose_b, pos_tol_m=0.003, rot_tol=1e-2) -> bool:
     """Cheap stillness test between two consecutive Pico poses (positional + quat-norm proxy)."""
-    if pose_a is None or pose_b is None:
+    if pose_a is None or pose_b is None or not _pose_has_valid_quat(pose_a) or not _pose_has_valid_quat(pose_b):
         return False
     a = np.asarray(pose_a, dtype=np.float64)
     b = np.asarray(pose_b, dtype=np.float64)
@@ -380,6 +403,20 @@ def _is_still(pose_a, pose_b, pos_tol_m=0.003, rot_tol=1e-2) -> bool:
     # quaternion closeness: |q1 . q2| close to 1 (handle double cover)
     dot = abs(float(np.dot(a[3:], b[3:])))
     return dot > 1.0 - rot_tol
+
+
+def _draw_waiting_pose(frame_bgr: np.ndarray, controller: str) -> np.ndarray:
+    out = frame_bgr.copy()
+    cv2.putText(
+        out,
+        f"waiting for valid {controller} pose...",
+        (12, 32),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 200, 255),
+        2,
+    )
+    return out
 
 
 def _draw_preview(

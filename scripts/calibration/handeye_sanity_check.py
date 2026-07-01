@@ -62,6 +62,14 @@ STEPS = [
 WIN_W, WIN_H = 780, 720
 
 
+def is_valid_pose(pose) -> bool:
+    """XR can return a zero quaternion while tracking is not ready."""
+    if pose is None:
+        return False
+    arr = np.asarray(pose, dtype=np.float64)
+    return arr.shape[0] >= 7 and np.linalg.norm(arr[3:7]) > 1e-8
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Pico axis sanity check + axis_remap discovery.")
     p.add_argument("--controller", default="right_controller", choices=["left_controller", "right_controller", "headset"])
@@ -79,9 +87,17 @@ def parse_args() -> argparse.Namespace:
 def average_position(xr: XrClient, controller: str, n: int = 24, dt: float = 0.012) -> np.ndarray:
     """Average ``n`` consecutive Pico translations to suppress jitter at capture time."""
     acc = np.zeros(3, dtype=np.float64)
-    for _ in range(n):
+    got = 0
+    deadline = time.monotonic() + max(3.0, n * dt * 8.0)
+    while got < n:
         pose = xr.get_pose_by_name(controller)
+        if not is_valid_pose(pose):
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"Timed out waiting for a valid pose from {controller}.")
+            time.sleep(dt)
+            continue
         acc += np.asarray(pose[:3], dtype=np.float64)
+        got += 1
         time.sleep(dt)
     return acc / n
 
@@ -178,6 +194,15 @@ def render(state) -> np.ndarray:
     return img
 
 
+def render_waiting(controller: str) -> np.ndarray:
+    img = np.zeros((WIN_H, WIN_W, 3), dtype=np.uint8)
+    _line(img, f"Pico sanity check   |   controller = {controller}", 34, scale=0.7, color=(255, 255, 255), thickness=2)
+    _line(img, "Waiting for a valid XR pose...", 92, scale=0.65, color=(0, 200, 255), thickness=2)
+    _line(img, "Make sure XRoboToolkit PC Service is running and the controller is awake/tracked.", 128, scale=0.5)
+    _line(img, "q / ESC = quit", WIN_H - 30, scale=0.5, color=(170, 170, 170))
+    return img
+
+
 # =====================================================================================
 # Main
 # =====================================================================================
@@ -200,8 +225,19 @@ def main() -> None:
     win = "handeye sanity check"
     cv2.namedWindow(win, cv2.WINDOW_AUTOSIZE)
     try:
+        next_invalid_warn = 0.0
         while True:
             pose = xr.get_pose_by_name(args.controller)
+            if not is_valid_pose(pose):
+                now = time.monotonic()
+                if now >= next_invalid_warn:
+                    print(f"[wait] {args.controller} pose is not valid yet (zero quaternion).")
+                    next_invalid_warn = now + 2.0
+                cv2.imshow(win, render_waiting(args.controller))
+                key = cv2.waitKey(50) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+                continue
             t = np.asarray(pose[:3], dtype=np.float64)
             quat = np.asarray(pose[3:], dtype=np.float64)  # [qx, qy, qz, qw]
             R = quat_xyzw_to_rotmat(quat)
