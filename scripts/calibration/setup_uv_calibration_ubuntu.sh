@@ -100,6 +100,11 @@ uv pip install --upgrade pip setuptools wheel
 uv pip install numpy opencv-python pyrealsense2
 
 echo "[3/5] Installing XRoboToolkit SDK binding"
+uv pip install pybind11
+PYBIND11_CMAKE_DIR="$(python -m pybind11 --cmakedir)"
+export pybind11_DIR="${PYBIND11_CMAKE_DIR}"
+export CMAKE_PREFIX_PATH="${PYBIND11_CMAKE_DIR}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"
+
 mkdir -p dependencies
 if [[ ! -d dependencies/XRoboToolkit-PC-Service-Pybind/.git ]]; then
     git clone https://github.com/XR-Robotics/XRoboToolkit-PC-Service-Pybind.git dependencies/XRoboToolkit-PC-Service-Pybind
