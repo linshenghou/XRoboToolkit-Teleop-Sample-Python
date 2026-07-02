@@ -86,7 +86,19 @@ def _camera_worker(
     config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
 
     pipeline = rs.pipeline()
-    pipeline.start(config)
+    try:
+        pipeline.start(config)
+    except Exception as exc:
+        msg_queue.put(
+            {
+                "error": (
+                    f"Failed to start RealSense color stream "
+                    f"(serial={serial or '<first device>'}, {width}x{height}@{fps}): {exc}"
+                )
+            }
+        )
+        ready_event.set()
+        return
 
     # --- report factory intrinsics back to the parent before signalling ready ---
     profile = pipeline.get_active_profile().get_stream(rs.stream.color).as_video_stream_profile()
@@ -233,6 +245,8 @@ def main() -> None:
         if not ready.is_set():
             raise RuntimeError("Camera warm-up timed out.")
         intr_msg = msg_q.get(timeout=5.0)
+        if "error" in intr_msg:
+            raise RuntimeError(intr_msg["error"])
         K, dist = intr_msg["K"], intr_msg["dist"]
         print("Camera is hot. Intrinsics:\n", K)
         print("Distortion:", dist.ravel())
