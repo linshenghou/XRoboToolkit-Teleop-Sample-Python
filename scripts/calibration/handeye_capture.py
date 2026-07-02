@@ -270,85 +270,88 @@ def main() -> None:
         trig_armed = True  # rising-edge / hysteresis state for the Pico trigger
         next_invalid_warn = 0.0
 
-        while True:
-            loop_i += 1
-            pose = xr.get_pose_by_name(args.controller)  # [x,y,z,qx,qy,qz,qw]
-            frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
-            if not _pose_has_valid_quat(pose):
-                now = time.monotonic()
-                if now >= next_invalid_warn:
-                    print(f"  [wait] {args.controller} pose is not valid yet (zero quaternion).")
-                    next_invalid_warn = now + 2.0
+        try:
+            while True:
+                loop_i += 1
+                pose = xr.get_pose_by_name(args.controller)  # [x,y,z,qx,qy,qz,qw]
+                frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
+                if not _pose_has_valid_quat(pose):
+                    now = time.monotonic()
+                    if now >= next_invalid_warn:
+                        print(f"  [wait] {args.controller} pose is not valid yet (zero quaternion).")
+                        next_invalid_warn = now + 2.0
+                    if loop_i % max(1, args.preview_every) == 0:
+                        cv2.imshow(win_title, _draw_waiting_pose(frame_bgr, args.controller))
+                    key = cv2.waitKey(50) & 0xFF
+                    if key in (ord("q"), 27):
+                        break
+                    continue
+
+                # stillness detection (positional + small rotational proxy)
+                still = _is_still(prev_pose, pose)
+                prev_pose = pose
+                if still:
+                    if still_since is None:
+                        still_since = time.monotonic()
+                else:
+                    still_since = None
+                still_ok = still_since is not None and (time.monotonic() - still_since) >= args.min_still_s
+
                 if loop_i % max(1, args.preview_every) == 0:
-                    cv2.imshow(win_title, _draw_waiting_pose(frame_bgr, args.controller))
-                key = cv2.waitKey(50) & 0xFF
+                    preview = _draw_preview(frame_bgr, pattern_size, still_ok, len(samples), capture_hint)
+                    cv2.imshow(win_title, preview)
+
+                # Pico trigger: rising edge only (hold-to-repeat disabled via hysteresis).
+                trigger_rising = False
+                if trigger_name is not None:
+                    tv = float(xr.get_key_value_by_name(trigger_name))
+                    if trig_armed and tv > args.trigger_press:
+                        trigger_rising = True
+                        trig_armed = False
+                    elif not trig_armed and tv < args.trigger_release:
+                        trig_armed = True
+
+                key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):
                     break
-                continue
-
-            # stillness detection (positional + small rotational proxy)
-            still = _is_still(prev_pose, pose)
-            prev_pose = pose
-            if still:
-                if still_since is None:
-                    still_since = time.monotonic()
-            else:
-                still_since = None
-            still_ok = still_since is not None and (time.monotonic() - still_since) >= args.min_still_s
-
-            if loop_i % max(1, args.preview_every) == 0:
-                preview = _draw_preview(frame_bgr, pattern_size, still_ok, len(samples), capture_hint)
-                cv2.imshow(win_title, preview)
-
-            # Pico trigger: rising edge only (hold-to-repeat disabled via hysteresis).
-            trigger_rising = False
-            if trigger_name is not None:
-                tv = float(xr.get_key_value_by_name(trigger_name))
-                if trig_armed and tv > args.trigger_press:
-                    trigger_rising = True
-                    trig_armed = False
-                elif not trig_armed and tv < args.trigger_release:
-                    trig_armed = True
-
-            key = cv2.waitKey(1) & 0xFF
-            if key in (ord("q"), 27):
-                break
-            if key in (ord(" "), ord("p")) or trigger_rising:
-                if not still_ok:
-                    print(f"  [skip] hand not still enough -- hold steady for ~1 s, then {capture_hint} again.")
-                    continue
-                ok, corners = detect_chessboard(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY), pattern_size)
-                if not ok:
-                    print("  [skip] chessboard not detected in this frame -- re-aim and retry.")
-                    continue
-                # re-grab the freshest frame + pose at the same instant to minimise skew
-                frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
-                pose_now = xr.get_pose_by_name(args.controller)
-                if not _pose_has_valid_quat(pose_now):
-                    print(f"  [skip] {args.controller} pose became invalid -- wake/track the controller and retry.")
-                    continue
-                src = "trigger" if trigger_rising else "SPACE"
-                meta = {
-                    "source": src,
-                    "trigger_value": float(tv) if trigger_name is not None else None,
-                    "camera_ts_us": int(cam_ts),
-                    "pico_ts_ns": int(xr.get_timestamp_ns()),
-                    "capture_mono_ns": time.monotonic_ns(),
-                    "n_corners": int(corners.shape[0]),
-                }
-                write_sample(record_dir, next_index, frame_bgr, pose_now, meta)
-                print(f"  [ok] sample_{next_index:03d} saved via {src}. total = {len(samples) + 1}")
-                samples.append(record_dir / f"sample_{next_index:03d}.json")
-                next_index += 1
-            elif key == ord("d"):
-                if samples:
-                    last = samples.pop()
-                    for suffix in (".png", ".json"):
-                        f = record_dir / (last.stem + suffix)
-                        if f.exists():
-                            f.unlink()
-                    next_index = int(last.stem.split("_")[1])
-                    print(f"  [undo] removed {last.stem}. total = {len(samples)}")
+                if key in (ord(" "), ord("p")) or trigger_rising:
+                    if not still_ok:
+                        print(f"  [skip] hand not still enough -- hold steady for ~1 s, then {capture_hint} again.")
+                        continue
+                    ok, corners = detect_chessboard(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY), pattern_size)
+                    if not ok:
+                        print("  [skip] chessboard not detected in this frame -- re-aim and retry.")
+                        continue
+                    # re-grab the freshest frame + pose at the same instant to minimise skew
+                    frame_bgr, cam_ts = read_latest_frame(buf_view, seq, ts_us)
+                    pose_now = xr.get_pose_by_name(args.controller)
+                    if not _pose_has_valid_quat(pose_now):
+                        print(f"  [skip] {args.controller} pose became invalid -- wake/track the controller and retry.")
+                        continue
+                    src = "trigger" if trigger_rising else "SPACE"
+                    meta = {
+                        "source": src,
+                        "trigger_value": float(tv) if trigger_name is not None else None,
+                        "camera_ts_us": int(cam_ts),
+                        "pico_ts_ns": int(xr.get_timestamp_ns()),
+                        "capture_mono_ns": time.monotonic_ns(),
+                        "n_corners": int(corners.shape[0]),
+                    }
+                    write_sample(record_dir, next_index, frame_bgr, pose_now, meta)
+                    print(f"  [ok] sample_{next_index:03d} saved via {src}. total = {len(samples) + 1}")
+                    samples.append(record_dir / f"sample_{next_index:03d}.json")
+                    next_index += 1
+                elif key == ord("d"):
+                    if samples:
+                        last = samples.pop()
+                        for suffix in (".png", ".json"):
+                            f = record_dir / (last.stem + suffix)
+                            if f.exists():
+                                f.unlink()
+                        next_index = int(last.stem.split("_")[1])
+                        print(f"  [undo] removed {last.stem}. total = {len(samples)}")
+        except KeyboardInterrupt:
+            print("\nInterrupted; writing dataset.json before shutdown.")
 
         # --- persist dataset config (intrinsics + chessboard params) ---
         write_dataset_config(
