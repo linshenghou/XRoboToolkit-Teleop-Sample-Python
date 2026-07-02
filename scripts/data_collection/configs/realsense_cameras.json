@@ -1,0 +1,87 @@
+{
+  "schema": "realsense_camera_roles_v2",
+  "recording_host": "same_host",
+  "capture": {
+    "streams": ["rgb", "metadata"],
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "roles": {
+    "left_cam": {
+      "serial_number": "260322271277",
+      "observed_camera_index": 1,
+      "model": "Intel RealSense D405",
+      "product_line": "D400",
+      "firmware_version": "5.17.0.10",
+      "timestamp_domain": "global_time",
+      "metadata": {
+        "frame_counter": true,
+        "frame_timestamp": true,
+        "sensor_timestamp": true,
+        "time_of_arrival": true,
+        "backend_timestamp": true
+      },
+      "intrinsics": {
+        "fx": 395.3541,
+        "fy": 394.9982,
+        "ppx": 316.8495,
+        "ppy": 233.1899,
+        "coeffs": [-0.051555, 0.055768, 0.001545, -0.000041, -0.018684],
+        "width": 640,
+        "height": 480
+      },
+      "notes": "Left camera. Intrinsics captured from factory color stream profile."
+    },
+    "right_cam": {
+      "serial_number": "260522273991",
+      "observed_camera_index": 0,
+      "model": "Intel RealSense D405",
+      "product_line": "D400",
+      "firmware_version": "5.17.0.10",
+      "timestamp_domain": "global_time",
+      "metadata": {
+        "frame_counter": true,
+        "frame_timestamp": true,
+        "sensor_timestamp": true,
+        "time_of_arrival": true,
+        "backend_timestamp": true
+      },
+      "intrinsics": {
+        "fx": 393.4011,
+        "fy": 393.1311,
+        "ppx": 320.0154,
+        "ppy": 234.7531,
+        "coeffs": [-0.048708, 0.050287, 0.001759, -0.000081, -0.016142],
+        "width": 640,
+        "height": 480
+      },
+      "notes": "Right camera. Intrinsics captured from factory color stream profile."
+    },
+    "egocam": {
+      "serial_number": "260322277506",
+      "observed_camera_index": 2,
+      "model": "Intel RealSense D405",
+      "product_line": "D400",
+      "firmware_version": "5.17.0.10",
+      "timestamp_domain": "global_time",
+      "metadata": {
+        "frame_counter": true,
+        "frame_timestamp": true,
+        "sensor_timestamp": true,
+        "time_of_arrival": true,
+        "backend_timestamp": true
+      },
+      "intrinsics": {
+        "fx": 396.1566,
+        "fy": 395.7294,
+        "ppx": 324.4122,
+        "ppy": 244.085,
+        "coeffs": [-0.053691, 0.06067, 0.001808, -0.000048, -0.020939],
+        "width": 640,
+        "height": 480
+      },
+      "notes": "Egocentric camera. Not rigidly mounted to a tracker yet (no extrinsic)."
+    }
+  }
+}

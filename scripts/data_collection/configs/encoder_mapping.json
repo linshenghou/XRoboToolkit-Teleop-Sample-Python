@@ -1,0 +1,26 @@
+{
+  "schema": "encoder_roles_v1",
+  "recording_host": "same_host",
+  "baudrate": 9600,
+  "slave": 1,
+  "roles": {
+    "left_encoder": {
+      "port": "COM4",
+      "device": "USB-Enhanced-SERIAL CH343",
+      "manufacturer": "wch.cn",
+      "usb_serial": "5B90108980",
+      "hwid": "USB VID:PID=1A86:55D3 SER=5B90108980 LOCATION=1-5.4",
+      "verified_raw": 217,
+      "notes": "Bound while only the left encoder was connected."
+    },
+    "right_encoder": {
+      "port": "COM3",
+      "device": "USB-Enhanced-SERIAL CH343",
+      "manufacturer": "wch.cn",
+      "usb_serial": "5B90108259",
+      "hwid": "USB VID:PID=1A86:55D3 SER=5B90108259 LOCATION=1-4.3",
+      "verified_raw": 212,
+      "notes": "Bound while only the right encoder was connected."
+    }
+  }
+}
